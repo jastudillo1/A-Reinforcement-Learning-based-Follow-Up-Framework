@@ -1,0 +1,43 @@
+{
+  "Includes time": false,
+  "w": 4,
+  "s": 2,
+  "Max per class": 10000,
+  "Min per class": 500,
+  "Max points per lc": 2000,
+  "Min points per lc": 15,
+  "Numer of classes": 5,
+  "Classes Info": {
+    "Train set": {
+      "RRC": "7000 (26.613 %)",
+      "RRAB": "7000 (26.613 %)",
+      "MIRA_SR": "7000 (26.613 %)",
+      "RRD": "480 (1.825 %)",
+      "DSCT_SXPHE": "4823 (18.336 %)",
+      "Total": 26303
+    },
+    "Test set": {
+      "RRC": "2000 (26.613 %)",
+      "RRAB": "2000 (26.613 %)",
+      "MIRA_SR": "2000 (26.613 %)",
+      "RRD": "137 (1.823 %)",
+      "DSCT_SXPHE": "1378 (18.337 %)",
+      "Total": 7515
+    },
+    "Val set": {
+      "RRC": "1000 (26.610 %)",
+      "RRAB": "1000 (26.610 %)",
+      "MIRA_SR": "1000 (26.610 %)",
+      "RRD": "69 (1.836 %)",
+      "DSCT_SXPHE": "689 (18.334 %)",
+      "Total": 3758
+    },
+    "Keys": {
+      "0": "RRC",
+      "1": "RRAB",
+      "2": "MIRA_SR",
+      "3": "RRD",
+      "4": "DSCT_SXPHE"
+    }
+  }
+}

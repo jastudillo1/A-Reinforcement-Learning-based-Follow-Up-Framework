@@ -1,0 +1,1 @@
+wget -nv -r -nH --cut-dirs=8 -P ./sdss/ -i sdss-urls.txt
