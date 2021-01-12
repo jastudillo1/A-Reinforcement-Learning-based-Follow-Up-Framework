@@ -8,7 +8,6 @@
 *.fits
 *.zip
 *.rar
-*Models*
 *Logs
 *TFRecords
 Envs
