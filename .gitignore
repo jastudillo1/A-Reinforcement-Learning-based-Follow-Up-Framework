@@ -8,12 +8,15 @@
 *.fits
 *.zip
 *.rar
+*.pk
 *Logs
 *TFRecords
 Envs
-*Runs
-*model*
+*runs*
+*model/*
 *strategies*
 data
 *.tfrecord
 *.npz
+*checkpoint
+*h5.*
