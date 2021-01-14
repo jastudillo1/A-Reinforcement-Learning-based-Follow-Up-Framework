@@ -17,10 +17,16 @@ def make_splits(features, clf_size, rl_size, test_size, save_dir, min_support=0)
     
     save_path = f'{save_dir}/splits.pk'
 
+    # Filter labels with minimum support
     cls_, counts = np.unique(features.label, return_counts=True)
     perc = counts/sum(counts)
+    print(cls_, perc)
     cls_keep = cls_[perc>=min_support]
     features = features[features['label'].isin(cls_keep)]
+    features.reset_index(inplace=True, drop=True)
+    
+    # Filter lightcurves with at least 5 observations
+    features = features[features.lengths_gaia>=5]
     features.reset_index(inplace=True, drop=True)
 
     index = range(features.shape[0])
@@ -48,4 +54,4 @@ if __name__=='__main__':
     test_size = 0.2
     features = pd.read_csv(features_path)
     
-    make_splits(features, clf_size, rl_size, test_size, save_dir, min_support=0.01)
+    make_splits(features, clf_size, rl_size, test_size, save_dir, min_support=0.02)

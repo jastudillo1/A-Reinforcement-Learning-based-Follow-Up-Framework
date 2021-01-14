@@ -4,10 +4,10 @@ import json
 import numpy as np
 import os
 import pandas as pd
+import pickle
 from time import time
 from tqdm import tqdm
 
-from classifiers import include_splits
 from strategies import strategies, compare, metrics
 from trees import *
 
@@ -99,24 +99,31 @@ def run(features, clf_df, settings, id_, rl_model=None, processor=None):
 
 if __name__ == '__main__':
     
+    # Local paths
+    # ftrs_dir = '../../../../data/features'
+    # features_path = f'{ftrs_dir}/gaia-sdss/features.csv'
+    # splits_path = '../../splits.pk'
+    # clf_path =  '../../rf/classifiers.pkl'
+    # save_dir = './strategies'
     
-    ftrs_dir = '../../../../data/features'
-    features_path = f'{ftrs_dir}/gaia-sdss/features.csv'
-    splits_path = '../splits.pk'
-    clf_path =  '../rf/classifiers.pkl'
+    # Cluster paths
+    features_path = 'job_data/features.csv'
+    splits_path = 'job_data/splits.pk'
+    clf_path =  'job_data/classifiers.pkl'
     save_dir = './strategies'
     
     if not os.path.exists(save_dir):
         os.mkdir(save_dir)
     
     features = pd.read_csv(features_path)
+    with open(splits_path, 'rb') as f:
+        splits = pickle.load(f)
     
-    train = features.set_index('id_gaia').loc[splits['rl_train']].reset_index()
-    test = features.set_index('id_gaia').loc[splits['test']].reset_index()
+    rl_train = features.set_index('id_gaia').loc[splits['rl_train']].reset_index()
     clf_df = pd.read_pickle(clf_path)
 
     runs = make_settings()
-    strat_summ = Parallel(n_jobs=2)(delayed(run)(features_rl, clf_df, settings, id_)
+    strat_summ = Parallel(n_jobs=-1)(delayed(run)(rl_train, clf_df, settings, id_)
                         for id_, settings in runs.items())
     # for run_id, settings in runs.items():
     #     run(test_features, clf_df, settings, run_id)

@@ -43,7 +43,8 @@ class FeatureExtractor:
         
         data = ts_features['all_h']
         dim0 = len(data) # Number of sources
-        dim1 = int(max(ts_features['lengths'])) # Max number of observations within a single lightcurve
+        # dim1 = int(max(ts_features['lengths'])) # Max number of observations within a single lightcurve
+        dim1 = len(max(data, key=len)) # Max number of observations within a single lightcurve
         dim2 = len(data[0][0]) # Hidden state dim
 
         data_ = np.full((dim0,dim1,dim2,), 0.0)
@@ -58,7 +59,7 @@ class FeatureExtractor:
         ts_df = ts_df.add_suffix('_gaia')
         ts_df = ts_df.set_index('id_gaia', drop=True)
         ts_df[ts_df.columns] = scaler.fit_transform(ts_df)
-        ts_df['lengths_gaia'] = ts_features['lengths'].astype(int)
+        ts_df['lengths_gaia'] = [len(source) for source in data] #ts_features['lengths'].astype(int)
         ts_time = FeatureExtractor.get_time(ts_df.index)
         ts_df = ts_df.join(ts_time)
         

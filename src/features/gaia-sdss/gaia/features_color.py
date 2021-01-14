@@ -34,7 +34,7 @@ def color_features(bp_dir, rp_dir):
 if __name__ == '__main__':
     ftrs_dir = '../../../../data/features'
     obs_dir = '../../../../data/observations'
-    save_path = f'{ftrs_dir}/gaia-sddss/features_color.csv'
+    save_path = f'{ftrs_dir}/gaia-sdss/features_color.csv'
     
     bp_dir = f'{obs_dir}/gaia/xmatch/bands/BP/'
     rp_dir = f'{obs_dir}/gaia/xmatch/bands/RP/'

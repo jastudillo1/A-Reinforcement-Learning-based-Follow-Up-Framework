@@ -44,7 +44,7 @@ def gaia_rnn_ctlg(gaia_sources, xmatch, ckeep, min_N, gaia_obs_dir):
     
     in_xmatch = [idx in xmatch.source_id_gaia.values for idx in gaia_sources.index.values]
     out_xmatch = ~np.array(in_xmatch)
-    in_N = gaia_sources.matched_observations >= min_N
+    in_N = gaia_sources.astrometric_matched_observations >= min_N
     in_cls = gaia_sources.best_class_name.isin(ckeep)
     gaia_filter = gaia_sources[out_xmatch & in_N & in_cls]
     
@@ -60,7 +60,7 @@ def xgaia_rnn_ctlg(gaia_sources, xmatch, ckeep, min_N, gaia_obs_dir):
     '''
     
     in_xmatch = [idx in xmatch.source_id_gaia.values for idx in gaia_sources.index.values]
-    in_N = gaia_sources.matched_observations >= min_N
+    in_N = gaia_sources.astrometric_matched_observations >= min_N
     in_cls = gaia_sources.best_class_name.isin(ckeep)
     gaia_filter = gaia_sources[in_xmatch & in_N & in_cls]
     
@@ -83,7 +83,6 @@ if __name__=='__main__':
     gaia_rnn_ctlg_path = f'{ctlg_dir}/gaia/gaia-rnn.dat'
     xgaia_rnn_ctlg_path = f'{ctlg_dir}/gaia-sdss/xgaia-rnn.dat'
 
-    min_N = 15
     ckeep = ['RRC', 'RRD', 'DSCT_SXPHE', 'MIRA_SR', 'RRAB']
     
     xmatch = pd.read_csv(xmatch_path, usecols=['source_id_gaia'])
@@ -97,9 +96,11 @@ if __name__=='__main__':
     gaia_sources = gaia_sources.join(gaia_labels['best_class_name'])
     
     # Gaia sources for RNN model training
+    min_N = 15
     gaia_rnn_ctlg_ = gaia_rnn_ctlg(gaia_sources, xmatch, ckeep, min_N, gaia_obs_dir)
     gaia_rnn_ctlg_.to_csv(gaia_rnn_ctlg_path, index=False)
     
     # Gaia sources in cross-match for RNN feature extraction
+    min_N = 1
     xgaia_rnn_ctlg_ = xgaia_rnn_ctlg(gaia_sources, xmatch, ckeep, min_N, gaia_obs_dir)
     xgaia_rnn_ctlg_.to_csv(xgaia_rnn_ctlg_path, index=False)
