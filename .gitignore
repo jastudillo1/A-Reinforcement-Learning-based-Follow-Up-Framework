@@ -20,3 +20,5 @@ data
 *.npz
 *checkpoint
 *h5.*
+*.err
+*.out

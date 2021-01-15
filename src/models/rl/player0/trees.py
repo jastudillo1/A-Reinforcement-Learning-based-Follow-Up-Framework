@@ -381,7 +381,6 @@ class PhotoTree(CasesTree):
         self.path_info()
         
 class BruteForceTree(CasesTree):
-    # Exhaustive strategy
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self.best_prob = -1

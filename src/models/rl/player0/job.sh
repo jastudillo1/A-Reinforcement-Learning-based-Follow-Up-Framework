@@ -1,7 +1,7 @@
 #!/bin/bash
 #SBATCH -n 24                # Number of cores
 #SBATCH -N 1                  # Number of cores
-#SBATCH -t 0-6:00              # Runtime in D-HH:MM, minimum of 10 minutes
+#SBATCH -t 0-2:00              # Runtime in D-HH:MM, minimum of 10 minutes
 #SBATCH -p shared               # Partition to submit to
 #SBATCH --mem=12000       # Memory pool for all cores (see also --mem-per-cpu)
 #SBATCH -o %j.out               # File to which STDOUT will be written, %j inserts jobid

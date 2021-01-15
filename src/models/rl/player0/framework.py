@@ -117,10 +117,12 @@ class Models:
 
 class SetUp:
 
-    def __init__(self, features_path, clf_path, splits_path, settings_path, reward_path):
+    def __init__(self, features_path, clf_path, rl_ids_path, test_ids_path, 
+        settings_path, reward_path):
         self.features_path = features_path
         self.clf_path = clf_path
-        self.splits_path = splits_path
+        self.rl_ids_path = rl_ids_path
+        self.test_ids_path = test_ids_path
         self.settings_path = settings_path
         self.reward_path = reward_path
         self.set_up()
@@ -139,10 +141,9 @@ class SetUp:
         self.processor = Processor(train_dataset, input_order)
 
     def set_ftrs(self):
-        with open(self.splits_path, 'rb') as f:
-            splits = pickle.load(f)
-        features = pd.read_csv(self.features_path)
-        train_ftrs = features.set_index('id_gaia').loc[splits['rl_train']].reset_index()
+        splits = {'rl':self.rl_ids_path}
+        ftrs = pd.read_csv(self.features_path)
+        train_ftrs = include_splits(ftrs, splits, drop_rows=True)
         train_ftrs, val_ftrs = train_test_split(train_ftrs, stratify=train_ftrs['label'],
                                                         test_size=0.2, random_state=0)
         self.train_ftrs = train_ftrs
@@ -200,7 +201,7 @@ class RLTrainer:
         self.TARGET_UPDATE = 50
         self.VAL_METRICS = 100
         self.FILL_MEM = 5000
-        self.NUM_EPISODES = 6000
+        self.NUM_EPISODES = 4000
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
         self.ep_rewards = []
