@@ -129,8 +129,7 @@ class SetUp:
         self.set_ftrs()
         self.set_processor()
         self.set_env()
-        self.set_val_cases()
-
+        self.set_cases()
         self.set_target()
 
     def set_processor(self):
@@ -149,7 +148,11 @@ class SetUp:
         self.val_ftrs = val_ftrs
 
     def set_target(self):
-        self.target_reward = pd.read_csv(self.reward_path)
+        target = pd.read_csv(self.reward_path)
+        train_ids = self.train_ftrs.id_gaia
+        val_ids = self.val_ftrs.id_gaia
+        self.train_target = target.set_index('gaia_id').loc[train_ids].reset_index().reward.mean()
+        self.val_target = target.set_index('gaia_id').loc[val_ids].reset_index().reward.mean()
 
     def set_env(self):
         clf_df = pd.read_pickle(self.clf_path)
@@ -168,7 +171,8 @@ class SetUp:
             cases_.append(case_i)
         return cases_
 
-    def set_val_cases(self):
+    def set_cases(self):
+        self.train_cases = self.to_cases(self.train_ftrs, self.env)
         self.val_cases = self.to_cases(self.val_ftrs, self.env)
         
     def trainer_args(self):
@@ -176,18 +180,25 @@ class SetUp:
             'env':self.env, 
             'processor':self.processor, 
             'train_ftrs':self.train_ftrs, 
-            'val_cases':self.val_cases
+            'train_cases': self.train_cases,
+            'val_cases':self.val_cases,
+            'train_target': self.train_target,
+            'val_target': self.val_target,
             }
         return args
 
 class RLTrainer:
 
-    def __init__(self, env, processor, train_ftrs, val_cases, run):
+    def __init__(self, env, processor, train_ftrs, train_cases, val_cases, 
+        train_target, val_target, run):
         self.run = run
         self.env = env
         self.processor = processor
         self.train_ftrs = train_ftrs
+        self.train_cases = train_cases
         self.val_cases = val_cases
+        self.train_target = train_target
+        self.val_target = val_target
         self.set_models()
         self.set_paths()
         n_actions = self.env.action_space.n
@@ -199,12 +210,18 @@ class RLTrainer:
         
         self.TARGET_UPDATE = 50
         self.VAL_METRICS = 100
-        self.FILL_MEM = 5000
+        self.FILL_MEM = 10000
         self.NUM_EPISODES = 6000
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
         self.ep_rewards = []
-        self.val_rewards = {'rl':[], 'random':[], 'baseline':[], 'episode':[]}
+        self.rewards = {
+            'rl':{'train':[], 'val':[]}, 
+            'random':{'train':[], 'val':[]}, 
+            'baseline':{'train':[], 'val':[]}, 
+            'episode':[],
+            'target': {'train':self.train_target, 'val':self.val_target}
+            }
 
     def set_models(self):
         models_args = {
@@ -238,14 +255,21 @@ class RLTrainer:
 
         return case, state
 
-    def get_val_rewards(self, strategy):
-        strategy = strategy.lower()
-        assert strategy in ['random', 'baseline', 'rl']
+    def get_rewards(self, set_key, strategy_key):
+        strategy_key = strategy_key.lower()
+        assert strategy_key in ['random', 'baseline', 'rl']
+        
+        if set_key == 'train':
+            dataset = self.train_cases
+        elif set_key == 'val':
+            dataset = self.val_cases
+        else:
+            raise KeyError('Expected either `train` or `val` for `set_key` argument.')
 
-        action_fn = self.decider.strategy_action(strategy)
+        action_fn = self.decider.strategy_action(strategy_key)
         rewards_ = []
         cases_end = []
-        for case in self.val_cases:
+        for case in dataset:
             self.env.case_t = case
             curr_case = case
             curr_state = self.processor.process_obs(curr_case)
@@ -276,10 +300,12 @@ class RLTrainer:
     def update_summ(self, summary, episode):
         summary[self.model_name] = {
             'rewards':{
-                'random': self.val_rewards['random'][-1], 
-                'baseline': self.val_rewards['baseline'][-1], 
-                'rl': self.val_rewards['rl'][-1]},
-            'episode': episode}
+                'random': self.rewards['random']['val'][-1], 
+                'baseline': self.rewards['baseline']['val'][-1], 
+                'rl': self.rewards['rl']['val'][-1]},
+            'episode': episode,
+            'target': {'train':self.train_target, 'val':self.val_target}
+            }
                                 
         with open(self.summary_path, 'wb') as f:
             pickle.dump(summary, f)
@@ -293,23 +319,25 @@ class RLTrainer:
         else:
             best_rwd = -np.inf
         
-        curr_rwd = self.val_rewards['rl'][-1]
+        curr_rwd = self.rewards['rl']['val'][-1]
         if curr_rwd > best_rwd:
             self.models.save_target(self.model_path)
             self.del_oldest()
             self.update_summ(summary, episode)
                 
         with open(self.rewards_path, 'wb') as f:
-            pickle.dump(self.val_rewards, f)
+            pickle.dump(self.rewards, f)
 
 
     def val_metrics(self, episode):
 
-        for strategy in ['random', 'baseline', 'rl']:
-            cases_end, rewards_ = self.get_val_rewards(strategy)
-            self.val_rewards[strategy].append(np.mean(rewards_))
+        for strategy_key in ['random', 'baseline', 'rl']:
+            _, rewards_train = self.get_rewards('train', strategy_key)
+            _, rewards_val = self.get_rewards('val', strategy_key)
+            self.rewards[strategy_key]['train'].append(np.mean(rewards_train))
+            self.rewards[strategy_key]['val'].append(np.mean(rewards_val))
         step = self.decider.steps_done
-        self.val_rewards['episode'].append(episode)
+        self.rewards['episode'].append(episode)
         self.check_save(episode)
 
 
