@@ -16,4 +16,4 @@ def train_run(run):
     trainer.train()
 
 if __name__ == '__main__':
-    trainings = Parallel(n_jobs=-1)(delayed(train_run)(run) for run in range(50))
+    trainings = Parallel(n_jobs=-1)(delayed(train_run)(run) for run in range(24))

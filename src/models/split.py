@@ -16,6 +16,7 @@ def make_splits(features, clf_size, rl_size, test_size, save_dir, min_support=0)
     assert len(set(features.id_gaia))==features.shape[0] # No repetitions
     
     save_path = f'{save_dir}/splits.pk'
+    print(features.shape)
 
     # Filter labels with minimum support
     cls_, counts = np.unique(features.label, return_counts=True)
@@ -26,8 +27,9 @@ def make_splits(features, clf_size, rl_size, test_size, save_dir, min_support=0)
     features.reset_index(inplace=True, drop=True)
     
     # Filter lightcurves with at least 5 observations
-    features = features[features.lengths_gaia>=5]
+    features = features[features.lengths_gaia>=8]
     features.reset_index(inplace=True, drop=True)
+    print(features.shape[0])
 
     index = range(features.shape[0])
     labels = features['label']

@@ -16,8 +16,8 @@ class Decider:
         self.n_actions = n_actions
 
         self.EPS_START = 0.99
-        self.EPS_END = 0.05
-        self.EPS_DECAY = 3000
+        self.EPS_END = 0.01
+        self.EPS_DECAY = 5000
 
     def legal_action(self, case, action):
         if (action==0) and (case.n_obs>=case.max_obs):
