@@ -146,13 +146,16 @@ class SetUp:
                                                         test_size=0.2, random_state=0)
         self.train_ftrs = train_ftrs
         self.val_ftrs = val_ftrs
+        self.test_ftrs = features.set_index('id_gaia').loc[splits['test']].reset_index()
 
     def set_target(self):
         target = pd.read_csv(self.reward_path)
         train_ids = self.train_ftrs.id_gaia
         val_ids = self.val_ftrs.id_gaia
-        self.train_target = target.set_index('gaia_id').loc[train_ids].reset_index().reward.mean()
-        self.val_target = target.set_index('gaia_id').loc[val_ids].reset_index().reward.mean()
+        test_ids = self.test_ftrs.id_gaia
+        self.train_target = target.set_index('gaia_id').loc[train_ids].reset_index().reward
+        self.val_target = target.set_index('gaia_id').loc[val_ids].reset_index().reward
+        self.test_target = target.set_index('gaia_id').loc[test_ids].reset_index().reward
 
     def set_env(self):
         clf_df = pd.read_pickle(self.clf_path)
@@ -174,45 +177,157 @@ class SetUp:
     def set_cases(self):
         self.train_cases = self.to_cases(self.train_ftrs, self.env)
         self.val_cases = self.to_cases(self.val_ftrs, self.env)
+        self.test_cases = self.to_cases(self.test_ftrs, self.env)
         
-    def trainer_args(self):
+        
+    def rl_kwargs(self):
         args = {
             'env':self.env, 
             'processor':self.processor, 
+            
             'train_ftrs':self.train_ftrs, 
             'train_cases': self.train_cases,
-            'val_cases':self.val_cases,
             'train_target': self.train_target,
+            
+            'val_ftrs':self.val_ftrs, 
+            'val_cases': self.val_cases,
             'val_target': self.val_target,
+            
+            'test_ftrs':self.test_ftrs, 
+            'test_cases': self.test_cases,
+            'test_target': self.test_target,
             }
         return args
-
-class RLTrainer:
-
-    def __init__(self, env, processor, train_ftrs, train_cases, val_cases, 
-        train_target, val_target, run):
-        self.run = run
-        self.env = env
-        self.processor = processor
-        self.train_ftrs = train_ftrs
-        self.train_cases = train_cases
-        self.val_cases = val_cases
-        self.train_target = train_target
-        self.val_target = val_target
+        
+class RLFramework:
+    def __init__(self, **kwargs):
+        self.env = kwargs['env']
+        self.processor = kwargs['processor']
         self.set_models()
-        self.set_paths()
+        self.set_data(**kwargs)
         n_actions = self.env.action_space.n
         
         self.target_net = self.models.target_net
         self.policy_net = self.models.policy_net
         self.bl_recommender = Recommender(100)
         self.decider = Decider(self.target_net, self.policy_net, self.bl_recommender, self.processor, n_actions)
+        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    
+    def set_data(self, **kwargs):
+        # Set train_ftrs, test_ftrs...
+        for split_k in ['train', 'val', 'test']:
+            for attr_k in ['ftrs', 'cases', 'target']:
+                attr_name = f'{split_k}_{attr_k}'
+                attr_val = kwargs[attr_name]
+                setattr(self, attr_name , attr_val)
+                
+    def set_models(self):
+        models_args = {
+            'BATCH_SIZE': 256,
+            'GAMMA': 1,
+            'INPUTS': 18,
+            'N_ACTIONS': self.env.action_space.n,
+            'MEM_SIZE':50000
+            }
+        
+        self.models = Models(**models_args)
+        
+    def format_reward(self, reward):
+        return torch.tensor(np.array([reward]).astype(np.float32), device=self.device)
+        
+    def take_action(self, case, state, action, stage):
+        next_case, reward, done = self.env.step(action.item())
+        reward = self.format_reward(reward)
+
+        if not done:
+            next_state = self.processor.process_obs(next_case)
+        else:
+            next_state = None
+
+        # Store the transition in memory
+        self.models.memory.push(state, action, next_state, reward)
+
+        if stage == 'fill':
+            self.decider.update_bl(case, next_case, action, update_knn = False)
+        elif stage == 'train':
+            self.decider.update_bl(case, next_case, action, update_knn = True)
+
+        return next_case, next_state, done
+        
+    def restart(self, features):
+        case = self.env.reset(features)
+        state = self.processor.process_obs(case)
+
+        return case, state
+        
+    def get_rewards(self, set_key, strategy_key):
+        strategy_key = strategy_key.lower()
+        assert strategy_key in ['random', 'baseline', 'rl']
+        
+        if set_key == 'train':
+            dataset = self.train_cases
+        elif set_key == 'val':
+            dataset = self.val_cases
+        elif set_key == 'test':
+            dataset = self.test_cases
+        else:
+            raise KeyError('Expected either `train` or `val` for `set_key` argument.')
+        
+        action_fn = self.decider.strategy_action(strategy_key)
+        rewards_ = []
+        cases_end = []
+        for case in dataset:
+            self.env.case_t = case
+            curr_case = case
+            curr_state = self.processor.process_obs(curr_case)
+            done = False
+            while not done:
+                action = action_fn(curr_case)
+                next_case, reward, done = self.env.step(action.item())
+                next_state = self.processor.process_obs(next_case)
+                curr_case, curr_state = next_case, next_state
+            cases_end.append(curr_case)
+            rewards_.append(curr_case.reward)    
+        return cases_end, rewards_
+        
+class RLEval(RLFramework):
+    
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.load_model(kwargs['model_path'])
+        self.FILL_MEM = 100#3000
+        self.fill_update_memory()
+        
+    def load_model(self, model_path):
+        self.target_net.load_state_dict(torch.load(model_path))
+
+    def restart(self):
+        rand_index = np.random.choice(self.train_ftrs.shape[0])
+        case_features = self.train_ftrs.iloc[rand_index]
+        return super().restart(case_features)
+        
+    def fill_update_memory(self):
+        
+        for i in tqdm(range(self.FILL_MEM)):
+            case, state = self.restart()
+            for t in count():
+                action = self.decider.random_action(case)
+                case, state, done = self.take_action(case, state, action, 'train')
+                if done:
+                    break
+    
+        
+class RLTrainer(RLFramework):
+    
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.run = kwargs['run']
+        self.set_paths()
         
         self.TARGET_UPDATE = 50
         self.VAL_METRICS = 100
-        self.FILL_MEM = 10000
+        self.FILL_MEM = 3000
         self.NUM_EPISODES = 6000
-        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
         self.ep_rewards = []
         self.rewards = {
@@ -220,19 +335,8 @@ class RLTrainer:
             'random':{'train':[], 'val':[]}, 
             'baseline':{'train':[], 'val':[]}, 
             'episode':[],
-            'target': {'train':self.train_target, 'val':self.val_target}
+            'target': {'train':self.train_target.mean(), 'val':self.val_target.mean()}
             }
-
-    def set_models(self):
-        models_args = {
-            'BATCH_SIZE': 256,
-            'GAMMA': 1,
-            'INPUTS': 18,
-            'N_ACTIONS': self.env.action_space.n,
-            'MEM_SIZE':1000000
-            }
-        
-        self.models = Models(**models_args)
         
     def set_paths(self):
         self.model_dir = f'./runs/models'
@@ -250,38 +354,7 @@ class RLTrainer:
     def restart(self):
         rand_index = np.random.choice(self.train_ftrs.shape[0])
         case_features = self.train_ftrs.iloc[rand_index]
-        case = self.env.reset(case_features)
-        state = self.processor.process_obs(case)
-
-        return case, state
-
-    def get_rewards(self, set_key, strategy_key):
-        strategy_key = strategy_key.lower()
-        assert strategy_key in ['random', 'baseline', 'rl']
-        
-        if set_key == 'train':
-            dataset = self.train_cases
-        elif set_key == 'val':
-            dataset = self.val_cases
-        else:
-            raise KeyError('Expected either `train` or `val` for `set_key` argument.')
-
-        action_fn = self.decider.strategy_action(strategy_key)
-        rewards_ = []
-        cases_end = []
-        for case in dataset:
-            self.env.case_t = case
-            curr_case = case
-            curr_state = self.processor.process_obs(curr_case)
-            done = False
-            while not done:
-                action = action_fn(curr_case)
-                next_case, reward, done = self.env.step(action.item())
-                next_state = self.processor.process_obs(next_case)
-                curr_case, curr_state = next_case, next_state
-            cases_end.append(curr_case)
-            rewards_.append(curr_case.reward)
-        return cases_end, rewards_
+        return super().restart(case_features)
         
     def del_oldest(self):
         models_f = glob.glob(f'{self.model_dir}/model_*.bin')
@@ -304,7 +377,7 @@ class RLTrainer:
                 'baseline': self.rewards['baseline']['val'][-1], 
                 'rl': self.rewards['rl']['val'][-1]},
             'episode': episode,
-            'target': {'train':self.train_target, 'val':self.val_target}
+            'target': {'train':self.train_target.mean(), 'val':self.val_target.mean()}
             }
                                 
         with open(self.summary_path, 'wb') as f:
@@ -340,31 +413,8 @@ class RLTrainer:
         self.rewards['episode'].append(episode)
         self.check_save(episode)
 
-
-    def format_reward(self, reward):
-        return torch.tensor(np.array([reward]).astype(np.float32), device=self.device)
-
-    def take_action(self, case, state, action, stage):
-        next_case, reward, done = self.env.step(action.item())
-        reward = self.format_reward(reward)
-
-        if not done:
-            next_state = self.processor.process_obs(next_case)
-        else:
-            next_state = None
-
-        # Store the transition in memory
-        self.models.memory.push(state, action, next_state, reward)
-
-        if stage == 'fill':
-            self.decider.update_bl(case, next_case, action, update_knn = False)
-        elif stage == 'train':
-            self.decider.update_bl(case, next_case, action, update_knn = True)
-
-        return next_case, next_state, done
-
-
     def fill_memory(self):
+        j = 0
         for i in tqdm(range(self.FILL_MEM)):
             case, state = self.restart()
             for t in count():
@@ -372,8 +422,10 @@ class RLTrainer:
                 case, state, done = self.take_action(case, state, action, 'fill')
                 if done:
                     break
-
+    
     def train(self):
+        self.fill_memory()
+        
         for episode in range(self.NUM_EPISODES):
             case, state = self.restart()
             for t in count():
@@ -389,6 +441,9 @@ class RLTrainer:
 
             if episode % self.VAL_METRICS == 0:
                 self.val_metrics(episode)
+
+
+        
 
 # if __name__=='__main__':
     # data_dir = './data/'
