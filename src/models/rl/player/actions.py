@@ -28,8 +28,8 @@ class Decider:
             return False
         return True
 
-    def random_action(self, case):
-        random_actions = np.random.choice([0,1,2,3], size=4, replace=False, p=[0.4,0.2,0.2,0.2])#p=[0.7,0.1,0.1,0.1])#
+    def random_action(self, case, p=[0.4,0.2,0.2,0.2]):
+        random_actions = np.random.choice([0,1,2,3], size=4, replace=False, p=p)
         for action in random_actions:
             if self.legal_action(case, action):
                 return torch.tensor([[action]], device=self.device, dtype=torch.long)
@@ -63,6 +63,38 @@ class Decider:
 
     def update_bl(self, case, next_case, action, update_knn):
         self.bl_recommender.push_experience(case, next_case, action, update_knn=update_knn)
+        
+    def photo_action(self, case):
+        if case.n_obs<case.max_obs:
+            return torch.tensor([[0]], device=self.device, dtype=torch.long)
+        else:
+            return torch.tensor([[3]], device=self.device, dtype=torch.long)
+            
+    def photo_color_action(self, case):
+        if case.n_obs<case.max_obs:
+            return torch.tensor([[0]], device=self.device, dtype=torch.long)
+        elif case.n_color<1:
+            return torch.tensor([[2]], device=self.device, dtype=torch.long)
+        else:
+            return torch.tensor([[3]], device=self.device, dtype=torch.long)
+            
+    def photo_spec_action(self, case):
+        if case.n_obs<case.max_obs:
+            return torch.tensor([[0]], device=self.device, dtype=torch.long)
+        elif case.n_spec<1:
+            return torch.tensor([[1]], device=self.device, dtype=torch.long)
+        else:
+            return torch.tensor([[3]], device=self.device, dtype=torch.long)
+        
+    def full_action(self, case):
+        if case.n_obs<case.max_obs:
+            return torch.tensor([[0]], device=self.device, dtype=torch.long)
+        elif case.n_spec<1:
+            return torch.tensor([[1]], device=self.device, dtype=torch.long)
+        elif case.n_color<1:
+            return torch.tensor([[2]], device=self.device, dtype=torch.long)
+        else:
+            return torch.tensor([[3]], device=self.device, dtype=torch.long)
 
     def strategy_action(self, strategy):
         if strategy=='random':
@@ -71,3 +103,11 @@ class Decider:
             return self.bl_action
         elif strategy=='rl':
             return self.target_action
+        elif strategy=='photo':
+            return self.photo_action
+        elif strategy=='photo_color':
+            return self.photo_color_action
+        elif strategy=='photo_spec':
+            return self.photo_spec_action
+        elif strategy=='full':
+            return self.full_action

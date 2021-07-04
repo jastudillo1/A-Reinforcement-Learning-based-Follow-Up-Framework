@@ -5,6 +5,10 @@ import pandas as pd
 import pickle
 from sklearn.ensemble import RandomForestClassifier  
 from sklearn.metrics import classification_report  
+from time import time
+
+import warnings
+warnings.filterwarnings('ignore') 
 
 from plots import plot_cm
 
@@ -93,6 +97,7 @@ def clf_df_train(clf_df, datasets_train, datasets_test, save_dir):
     report = {}
     
     for clf_index, row in clf_df.iterrows():
+        t0 = time()
         src_include = row[row==1]
         src_include = src_include.index 
         X_train = build_X(datasets_train, src_include)
@@ -115,6 +120,10 @@ def clf_df_train(clf_df, datasets_train, datasets_test, save_dir):
         plot_cm(y_test, y_test_pred, classes, descr, descr_save, plot_dir)
         report[descr_save] = classification_report(y_test, y_test_pred)
         
+        t1 = time()
+        msg = f'RF {row} time: {t1-t0:.2f} s.'
+        print(msg)
+        
     with open(report_path, 'wb') as f:
         pickle.dump(report, f)
     
@@ -134,7 +143,8 @@ if __name__=='__main__':
     ftrs_dir = '../../../data/features'
     features_path = f'{ftrs_dir}/gaia-sdss/features.csv'
     splits_path = '../splits.pk'
-    save_dir = './'
+    save_dir = './test_paper'
+    t0 = time()
     
     features = pd.read_csv(features_path)
     with open(splits_path, 'rb') as f:
@@ -143,3 +153,7 @@ if __name__=='__main__':
     train = features.set_index('id_gaia').loc[splits['clf_train']].reset_index()
     test = features.set_index('id_gaia').loc[splits['test']].reset_index()
     train_clf(train, test, save_dir)
+    
+    t1 = time()
+    msg = f'Overall time: {t1-t0:.2f} s.'
+    print(msg)

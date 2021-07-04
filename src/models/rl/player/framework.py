@@ -260,9 +260,10 @@ class RLFramework:
 
         return case, state
         
-    def get_rewards(self, set_key, strategy_key):
+    def get_rewards(self, set_key, strategy_key, full_path=False):
         strategy_key = strategy_key.lower()
-        assert strategy_key in ['random', 'baseline', 'rl']
+        assert strategy_key in ['random', 'baseline', 'rl', 'photo', 'photo_color', 
+            'photo_spec', 'full']
         
         if set_key == 'train':
             dataset = self.train_cases
@@ -276,8 +277,11 @@ class RLFramework:
         action_fn = self.decider.strategy_action(strategy_key)
         rewards_ = []
         cases_end = []
+        paths_end = []
         for case in dataset:
             self.env.case_t = case
+            if full_path:
+                case_path = [case]
             curr_case = case
             curr_state = self.processor.process_obs(curr_case)
             done = False
@@ -286,8 +290,14 @@ class RLFramework:
                 next_case, reward, done = self.env.step(action.item())
                 next_state = self.processor.process_obs(next_case)
                 curr_case, curr_state = next_case, next_state
+                if full_path:
+                    case_path.append(curr_case)
             cases_end.append(curr_case)
             rewards_.append(curr_case.reward)    
+            if full_path:
+                paths_end.append(case_path)
+        if full_path:
+            return cases_end, rewards_, paths_end
         return cases_end, rewards_
         
 class RLEval(RLFramework):
@@ -295,7 +305,7 @@ class RLEval(RLFramework):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self.load_model(kwargs['model_path'])
-        self.FILL_MEM = 100#3000
+        self.FILL_MEM = 1000#20000
         self.fill_update_memory()
         
     def load_model(self, model_path):
@@ -311,7 +321,7 @@ class RLEval(RLFramework):
         for i in tqdm(range(self.FILL_MEM)):
             case, state = self.restart()
             for t in count():
-                action = self.decider.random_action(case)
+                action = self.decider.random_action(case, p=[0.5,0.2,0.2,0.1])
                 case, state, done = self.take_action(case, state, action, 'train')
                 if done:
                     break

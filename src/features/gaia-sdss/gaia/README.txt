@@ -1,4 +1,4 @@
-`ctlg.py`: builds catalogues of gaia sources to train and evaluate RNN model which will be used for feature extraction at a later pahse.
+`ctlg.py`: builds catalogues of gaia sources to train and evaluate RNN model which will be used for feature extraction at a later phase.
 
 `bands.py`: split color bands from gaia observations for all sources in gaia-sdss cross-match. 
 
